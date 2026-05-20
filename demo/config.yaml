@@ -1,0 +1,22 @@
+model:
+  path: model/yolov5n
+  backend: NCNN
+  device: CPU
+  num_threads: 4
+
+preprocess:
+  - type: LetterBox
+    params:
+      target_width: 640
+      target_height: 640
+      max_stride: 32
+      pad_value: 114
+
+postprocess:
+  - type: YoloDecode
+    params:
+      num_classes: 80
+      conf_threshold: 0.4
+      nms_threshold: 0.45
+
+task_type: detection
