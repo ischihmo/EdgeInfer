@@ -4,11 +4,11 @@
 
 ## 特性
 
-- **双 API** — C 接口（稳定 ABI，opaque handle）+ C++ 接口（单例 / 线程安全）
+- **双 API** — C 接口（稳定 ABI，opaque handle）+ C++ 接口（工厂模式 / 线程安全）
 - **配置驱动** — JSON / YAML 描述模型 + 预处理 + 后处理管道
-- **后端可插拔** — 适配器注册机制，支持 NCNN / MNN / CVDNN (OpenCV DNN)
-- **多格式图片** — `Image::FromFile()` 支持 JPEG / PNG / BMP / PPM，OpenCV 优先 + PPM 回退
-- **交叉编译友好** — `build.sh` 统一控制编译器、构建选项
+- **后端可插拔** — 适配器注册机制，支持 NCNN / MNN / CVDNN (OpenCV DNN) / NTCNN (Novatek NPU)
+- **多格式图片** — `Image::FromFile()` 支持 JPEG / PNG / BMP / PPM / NV21(YUV)，OpenCV 优先 + PPM/NV21 回退
+- **交叉编译友好** — `build.sh` 统一控制编译器、构建选项，`TARGET_ARCH` 一键切换 x86 / ARM
 
 ## 目录结构
 
@@ -30,11 +30,16 @@ EdgeInfer/
 ├── src/                     ← .cpp 实现 (core / adapters / processors / tools / api)
 ├── demo/                    ← YOLOv5n 推理示例 + 配置文件
 ├── third_party/
-│   ├── ncnn/                ← NCNN 头文件 + libncnn.a
-│   ├── mnn/                 ← MNN 头文件 + libMNN.so
-│   ├── opencv/              ← OpenCV 头文件 + libopencv_world.so
-│   ├── nlohmann/            ← json.hpp (单头文件)
-│   └── rapidyaml/           ← rapidyaml.hpp (单头文件)
+│   ├── x86/                 ← GCC 编译的三方库
+│   │   ├── ncnn/            ← NCNN 头文件 + libncnn.a
+│   │   ├── mnn/             ← MNN 头文件 + libMNN.so
+│   │   └── opencv/          ← OpenCV 头文件 + libopencv_world.so
+│   ├── arm-ca53/            ← ARM 交叉编译的三方库
+│   │   ├── ncnn/            ← NCNN 头文件 + libncnn.a
+│   │   ├── mnn/             ← MNN 头文件 + libMNN.so
+│   │   └── ntcnn/           ← Novatek vendor_ai SDK
+│   ├── nlohmann/            ← json.hpp (单头文件，不区分架构)
+│   └── rapidyaml/           ← rapidyaml.hpp (单头文件，不区分架构)
 ├── CMakeLists.txt
 ├── build.sh
 └── README.md
@@ -47,20 +52,23 @@ EdgeInfer/
 ```bash
 cd EdgeInfer
 
-# 默认 gcc/g++, Release, NCNN + OpenCV(CVDNN), 带 demo
-./build.sh
+# x86: NCNN + OpenCV(CVDNN) + demo
+EDGEINFER_ENABLE_NCNN=ON EDGEINFER_ENABLE_OPENCV=ON ./build.sh
 
-# 启用 MNN 后端
+# x86: MNN + demo
 EDGEINFER_ENABLE_MNN=ON ./build.sh
 
-# 禁用 OpenCV (纯 PPM 图片, 无外部图像依赖)
-EDGEINFER_ENABLE_OPENCV=OFF ./build.sh
+# x86: 纯 NCNN (无 OpenCV, PPM/NV21 回退加载图片)
+EDGEINFER_ENABLE_NCNN=ON EDGEINFER_ENABLE_OPENCV=OFF ./build.sh
 
-# 禁用 demo
-EDGEINFER_BUILD_DEMO=OFF ./build.sh
+# 禁用 demo (仅编译 libedgeinfer.so)
+EDGEINFER_BUILD_DEMO=OFF EDGEINFER_ENABLE_NCNN=ON ./build.sh
 
-# ARM 交叉编译
-CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++ ./build.sh
+# ARM: NCNN + MNN 交叉编译
+TARGET_ARCH=arm-ca53 EDGEINFER_ENABLE_NCNN=ON EDGEINFER_ENABLE_MNN=ON ./build.sh
+
+# ARM: NTCNN (Novatek NPU) 交叉编译
+EDGEINFER_ENABLE_NTCNN=ON ./build.sh
 ```
 
 产物在 `install/` 目录：
@@ -78,18 +86,18 @@ install/
 ```cpp
 #include <EdgeInfer.hpp>
 
-// 单例, 线程安全
-auto& engine = edgeinfer::EdgeInfer::GetInstance();
+// 工厂创建, 每个实例独立管线, 支持多模型并发
+auto engine = edgeinfer::EdgeInfer::Create();
 
 // 从配置文件初始化
-engine.Init("config.json");
+engine->Init("config.json");
 
 // 加载图片 (JPEG/PNG/BMP/PPM — OpenCV 优先, PPM 回退)
 edgeinfer::Image img = edgeinfer::Image::FromFile("dog.jpg");
 
 // 检测
 std::vector<edgeinfer::Boxf> boxes;
-engine.Detect(img, boxes);
+engine->Detect(img, boxes);
 
 for (auto& b : boxes) {
     printf("[%u] rect=[%.0f %.0f %.0f %.0f] score=%.3f\n",
@@ -98,18 +106,25 @@ for (auto& b : boxes) {
 
 // 分类
 edgeinfer::ClassificationResult cls;
-engine.Classify(img, cls);
+engine->Classify(img, cls);
 
 // 特征提取
 edgeinfer::EmbeddingResult emb;
-engine.Extract(img, emb);
+engine->Extract(img, emb);
 
 // 批量检测
 std::vector<edgeinfer::Image> images = {img1, img2, img3};
 std::vector<std::vector<edgeinfer::Boxf>> batch_results;
-engine.Detect(images, batch_results);
+engine->Detect(images, batch_results);
 
-engine.Release();
+engine->Release();
+
+// 多实例示例: 同时运行多个算法
+auto detect_engine   = edgeinfer::EdgeInfer::Create();
+auto classify_engine = edgeinfer::EdgeInfer::Create();
+detect_engine->Init("face_detect.json");
+classify_engine->Init("imagenet_classify.json");
+// 两个实例可跨线程独立使用
 ```
 
 ### C 接口
@@ -174,7 +189,12 @@ JSON:
 }
 ```
 
-YAML 格式等效。切换后端只需改 `backend` 字段（`"NCNN"` / `"MNN"` / `"CVDNN"`）和 `path` 指向对应模型文件（`.param` / `.mnn` / `.onnx`）。
+YAML 格式等效。切换后端只需改 `backend` 字段（`"NCNN"` / `"MNN"` / `"CVDNN"` / `"NTCNN"`）和 `path` 指向对应模型文件（`.param` / `.mnn` / `.onnx` / `.nvt`）。
+
+NTCNN 后端注意事项：
+- 输入为 NV21 (YUV420) 格式, 预处理（YUV→RGB、resize、normalize）在 NPU 模型转换时配置
+- 配置文件 `preprocess` 留空 `[]`
+- `Image::FromFile()` 自动识别文件名中 WxH 解析 NV21 图像
 
 ### Benchmark
 
@@ -206,11 +226,14 @@ Round   Total(ms)      Avg(ms)
 
 | 环境变量 | 默认值 | 说明 |
 |----------|--------|------|
-| `CC` / `CXX` | `gcc` / `g++` | C/C++ 编译器 |
+| `TARGET_ARCH` | 自动检测 | 目标架构 `x86` / `arm-ca53` |
+| `TOOLCHAIN_DIR` | `~/cross-compilier/arm-ca53-linux-gnueabihf-8.4/bin` | ARM 交叉编译工具链路径 |
+| `CC` / `CXX` | `gcc` / `g++`（ARM 时自动切交叉编译器） | C/C++ 编译器 |
 | `EDGEINFER_BUILD_DEMO` | `ON` | 是否编译 demo |
-| `EDGEINFER_ENABLE_NCNN` | `ON` | 是否启用 NCNN 后端 |
+| `EDGEINFER_ENABLE_NCNN` | `OFF` | 是否启用 NCNN 后端 |
 | `EDGEINFER_ENABLE_MNN` | `OFF` | 是否启用 MNN 后端 |
-| `EDGEINFER_ENABLE_OPENCV` | `ON` | 是否启用 OpenCV（含 CVDNN 后端 + 多格式图片加载）|
+| `EDGEINFER_ENABLE_OPENCV` | `OFF` | 是否启用 OpenCV（含 CVDNN 后端 + 多格式图片加载） |
+| `EDGEINFER_ENABLE_NTCNN` | `OFF` | 是否启用 NTCNN 后端（自动切 ARM 交叉编译） |
 | `BUILD_TYPE` | `Release` | Debug / Release |
 | `INSTALL_PREFIX` | `./install` | 安装目标目录 |
 | `JOBS` | `nproc` | 并行编译数 |
@@ -222,6 +245,7 @@ Round   Total(ms)      Avg(ms)
 | ncnn | 20260113 | NCNN 推理后端 |
 | MNN | 3.5.0 | MNN 推理后端 |
 | OpenCV | 4.13.0 | CVDNN 后端 + 图片加载 |
+| Novatek vendor_ai SDK | ≥ 02.05.2204210 | NTCNN 推理后端 (仅 ARM) |
 | nlohmann/json | 3.12.0 | JSON 配置解析 |
 | rapidyaml | 0.12.0 | YAML 配置解析 |
 

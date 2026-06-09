@@ -1,0 +1,20 @@
+{
+    "model": {
+        "path": "model/yolov5n.nvt",
+        "backend": "NTCNN",
+        "device": "NPU",
+        "num_threads": 1
+    },
+    "preprocess": [],
+    "postprocess": [
+        {
+            "type": "YoloDecode",
+            "params": {
+                "num_classes": 80,
+                "conf_threshold": 0.4,
+                "nms_threshold": 0.45
+            }
+        }
+    ],
+    "task_type": "detection"
+}

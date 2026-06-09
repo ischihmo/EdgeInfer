@@ -7,19 +7,36 @@
 
 namespace edgeinfer {
 
-// ============================================================
-// Singleton
-// ============================================================
-
 EdgeInfer::~EdgeInfer() = default;
 
-EdgeInfer& EdgeInfer::GetInstance() {
-    static EdgeInfer instance;
-    return instance;
-}
+// ============================================================
+// Factory
+// ============================================================
 
 std::unique_ptr<EdgeInfer> EdgeInfer::Create() {
     return std::unique_ptr<EdgeInfer>(new EdgeInfer());
+}
+
+// ============================================================
+// Move Semantics (std::mutex is not movable — use fresh mutex)
+// ============================================================
+
+EdgeInfer::EdgeInfer(EdgeInfer&& other) noexcept
+    : mutex_()
+    , pipeline_(std::move(other.pipeline_))
+    , task_type_(std::move(other.task_type_))
+    , initialized_(other.initialized_) {
+    other.initialized_ = false;
+}
+
+EdgeInfer& EdgeInfer::operator=(EdgeInfer&& other) noexcept {
+    if (this != &other) {
+        pipeline_ = std::move(other.pipeline_);
+        task_type_ = std::move(other.task_type_);
+        initialized_ = other.initialized_;
+        other.initialized_ = false;
+    }
+    return *this;
 }
 
 // ============================================================

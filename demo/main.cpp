@@ -32,21 +32,23 @@ int main(int argc, char* argv[]) {
             img.width, img.height, img.channels, img.DataSize());
 
     // --- Initialize EdgeInfer ---
-    auto& engine = edgeinfer::EdgeInfer::GetInstance();
+    auto engine = edgeinfer::EdgeInfer::Create();
 
     auto t0 = std::chrono::steady_clock::now();
-    if (!engine.Init(config_path)) {
+    if (!engine->Init(config_path)) {
         fprintf(stderr, "Failed to initialize from: %s\n", config_path.c_str());
         return 1;
     }
     auto t1 = std::chrono::steady_clock::now();
     auto init_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-    fprintf(stdout, "Init: %ld ms  Task: %s\n", init_ms, engine.TaskType().c_str());
+    std::string task = engine->TaskType();
+    fprintf(stdout, "Init: %ld ms  Task: %s\n", init_ms,
+            task.empty() ? "(unknown)" : task.c_str());
 
     // --- Run detection ---
     std::vector<edgeinfer::Boxf> boxes;
     auto t2 = std::chrono::steady_clock::now();
-    engine.Detect(img, boxes);
+    engine->Detect(img, boxes);
     auto t3 = std::chrono::steady_clock::now();
     auto infer_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count();
 
@@ -92,7 +94,7 @@ int main(int argc, char* argv[]) {
         auto t0 = std::chrono::steady_clock::now();
         for (int n = 0; n < kPerRound; ++n) {
             std::vector<edgeinfer::Boxf> b;
-            engine.Detect(img, b);
+            engine->Detect(img, b);
         }
         auto t1 = std::chrono::steady_clock::now();
         double total_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -100,7 +102,7 @@ int main(int argc, char* argv[]) {
     }
 
     // --- Cleanup ---
-    engine.Release();
+    engine->Release();
     fprintf(stdout, "Done.\n");
     return 0;
 }

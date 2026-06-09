@@ -176,28 +176,28 @@ bool Yaml::Empty() const { return Size() == 0; }
 std::string Yaml::GetString(const std::string& def) const {
     if (!Valid()) return def;
     c4::yml::ConstNodeRef node = Node();
-    if (!node.is_val() || !node.has_val()) return def;
+    if (!node.has_val()) return def;
     return FromCsubstr(node.val());
 }
 
 int64_t Yaml::GetInt(int64_t def) const {
     if (!Valid()) return def;
     c4::yml::ConstNodeRef node = Node();
-    if (!node.is_val() || !node.has_val()) return def;
+    if (!node.has_val()) return def;
     return CsubstrToInt(node.val());
 }
 
 double Yaml::GetDouble(double def) const {
     if (!Valid()) return def;
     c4::yml::ConstNodeRef node = Node();
-    if (!node.is_val() || !node.has_val()) return def;
+    if (!node.has_val()) return def;
     return CsubstrToDouble(node.val());
 }
 
 bool Yaml::GetBool(bool def) const {
     if (!Valid()) return def;
     c4::yml::ConstNodeRef node = Node();
-    if (!node.is_val() || !node.has_val()) return def;
+    if (!node.has_val()) return def;
     return CsubstrToBool(node.val());
 }
 

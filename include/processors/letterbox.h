@@ -44,6 +44,12 @@ private:
     int   pad_top_ = 0;
     int   orig_w_ = 0;
     int   orig_h_ = 0;
+
+    // Pre-allocated scratch buffers (reused across calls)
+    Image resized_;
+    Image padded_;
+    int    padded_w_ = 0;
+    int    padded_h_ = 0;
 };
 
 REGISTER_PREPROCESSOR("LetterBox", LetterBoxProcessor);

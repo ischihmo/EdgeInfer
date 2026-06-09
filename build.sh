@@ -3,14 +3,17 @@
 # EdgeInfer build script
 #
 # Configurable via environment variables:
-#   CC, CXX         - C/C++ compiler (default: gcc, g++)
-#   BUILD_TYPE      - Debug | Release (default: Release)
-#   INSTALL_PREFIX   - install directory (default: ./install)
-#   JOBS            - parallel build jobs (default: nproc)
+#   TARGET_ARCH        - x86 | arm-ca53 (auto-detected from CC if unset)
+#   TOOLCHAIN_DIR      - ARM cross-compiler bin dir (default: ~/cross-compilier/arm-ca53-linux-gnueabihf-8.4/bin)
+#   CC, CXX            - C/C++ compiler (auto-set from TOOLCHAIN_DIR when TARGET_ARCH=arm-ca53)
+#   BUILD_TYPE         - Debug | Release (default: Release)
+#   INSTALL_PREFIX     - install directory (default: ./install)
+#   JOBS               - parallel build jobs (default: nproc)
 #
 # Usage:
-#   ./build.sh                                           # native gcc build
-#   CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++   # cross-compile
+#   EDGEINFER_ENABLE_NCNN=ON EDGEINFER_ENABLE_OPENCV=ON ./build.sh    # x86 native
+#   TARGET_ARCH=arm-ca53 EDGEINFER_ENABLE_NCNN=ON ./build.sh           # ARM ncnn
+#   EDGEINFER_ENABLE_NTCNN=ON ./build.sh                              # ARM NTCNN (auto arm-ca53)
 #
 
 set -euo pipefail
@@ -18,19 +21,46 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# ── Toolchain ──────────────────────────────────────────────
+# ── Architecture ────────────────────────────────────────────
+TARGET_ARCH="${TARGET_ARCH:-}"                          # user override
+NTCNN_ON="${EDGEINFER_ENABLE_NTCNN:-OFF}"
+
+# ARM toolchain path
+TOOLCHAIN_DIR="${TOOLCHAIN_DIR:-${HOME}/cross-compilier/arm-ca53-linux-gnueabihf-8.4/bin}"
+ARM_CC="${TOOLCHAIN_DIR}/arm-ca53-linux-gnueabihf-gcc"
+ARM_CXX="${TOOLCHAIN_DIR}/arm-ca53-linux-gnueabihf-g++"
+
+# Resolve TARGET_ARCH: explicit > NTCNN auto > compiler detection
+if [ -z "$TARGET_ARCH" ]; then
+    if [ "$NTCNN_ON" = "ON" ]; then
+        TARGET_ARCH="arm-ca53"
+    elif [ -n "${CC:-}" ] && echo "$CC" | grep -q "arm-ca53"; then
+        TARGET_ARCH="arm-ca53"
+    else
+        TARGET_ARCH="x86"
+    fi
+fi
+
+# ── Compiler ────────────────────────────────────────────────
+if [ "$TARGET_ARCH" = "arm-ca53" ]; then
+    CC="${CC:-${ARM_CC}}"
+    CXX="${CXX:-${ARM_CXX}}"
+    export PATH="${TOOLCHAIN_DIR}:${PATH}"
+fi
 export CC="${CC:-gcc}"
 export CXX="${CXX:-g++}"
 
 echo "=== EdgeInfer Build ==="
 echo "CC  = $CC ($(command -v "$CC"))"
 echo "CXX = $CXX ($(command -v "$CXX"))"
+echo "ARCH = ${TARGET_ARCH}"
 
 # ── Build switches ─────────────────────────────────────────
 BUILD_DEMO="${EDGEINFER_BUILD_DEMO:-ON}"
-ENABLE_NCNN="${EDGEINFER_ENABLE_NCNN:-ON}"
+ENABLE_NCNN="${EDGEINFER_ENABLE_NCNN:-OFF}"
 ENABLE_MNN="${EDGEINFER_ENABLE_MNN:-OFF}"
-ENABLE_OPENCV="${EDGEINFER_ENABLE_OPENCV:-ON}"
+ENABLE_OPENCV="${EDGEINFER_ENABLE_OPENCV:-OFF}"
+ENABLE_NTCNN="${EDGEINFER_ENABLE_NTCNN:-OFF}"
 
 # ── Paths ──────────────────────────────────────────────────
 BUILD_TYPE="${BUILD_TYPE:-Release}"
@@ -42,6 +72,7 @@ echo "BUILD_DEMO     = ${BUILD_DEMO}"
 echo "ENABLE_NCNN    = ${ENABLE_NCNN}"
 echo "ENABLE_MNN     = ${ENABLE_MNN}"
 echo "ENABLE_OPENCV  = ${ENABLE_OPENCV}"
+echo "ENABLE_NTCNN   = ${ENABLE_NTCNN}"
 echo "BUILD_TYPE     = ${BUILD_TYPE}"
 echo "INSTALL_PREFIX = ${INSTALL_PREFIX}"
 echo "JOBS           = ${JOBS}"
@@ -53,10 +84,12 @@ CMAKE_ARGS=(
     -DCMAKE_CXX_COMPILER="$CXX"
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
     -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX"
+    -DTHIRD_PARTY_ARCH="$TARGET_ARCH"
     -DEDGEINFER_BUILD_DEMO="$BUILD_DEMO"
     -DEDGEINFER_WITH_NCNN="$ENABLE_NCNN"
     -DEDGEINFER_WITH_MNN="$ENABLE_MNN"
     -DEDGEINFER_WITH_OPENCV="$ENABLE_OPENCV"
+    -DEDGEINFER_WITH_NTCNN="$ENABLE_NTCNN"
 )
 
 mkdir -p "$BUILD_DIR"

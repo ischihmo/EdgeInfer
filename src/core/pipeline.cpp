@@ -55,7 +55,7 @@ Backend InferencePipeline::ParseBackend(const std::string& name) {
     if (name == "CVDNN")         return Backend::CVDNN;
     if (name == "ONNX"
         || name == "ONNXRUNTIME") return Backend::ONNXRUNTIME;
-    if (name == "NPU")           return Backend::NPU;
+    if (name == "NTCNN")         return Backend::NTCNN;
     return Backend::AUTO;
 }
 
@@ -120,16 +120,15 @@ bool InferencePipeline::Reload(const std::string& config_path) {
 // --- Pipeline Stages ---
 
 void InferencePipeline::Preprocess(const Image& input, Tensor& output) {
-    Image processed = input;
-
     // Step 1: preprocessor chain — Image → Image (optional)
     if (pre_processor_ && !pre_processor_->Empty()) {
-        pre_processor_->Process(input, processed);
-    }
-
-    // Step 2: adapter — Image → Tensor (always, handles normalization)
-    if (engine_) {
-        output = engine_->ImageToTensor(processed);
+        pre_processor_->Process(input, preprocessed_);
+        if (engine_) {
+            output = engine_->ImageToTensor(preprocessed_);
+        }
+    } else if (engine_) {
+        // Fast path: no preprocessor — ImageToTensor directly from input
+        output = engine_->ImageToTensor(input);
     }
 }
 

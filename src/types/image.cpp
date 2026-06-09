@@ -154,14 +154,16 @@ bool Image::ConvertFormat(PixelFormat target) {
         }
         data = std::move(out);
         channels = 3;
-        // swap if target differs from source channel order
-        if ((format == PixelFormat::RGBA && target == PixelFormat::BGR) ||
-            (format == PixelFormat::BGRA && target == PixelFormat::RGB)) {
-            format = (target == PixelFormat::BGR) ? PixelFormat::RGB
-                                                   : PixelFormat::BGR;
-            SwapRgbChannels(*this);
+
+        // After stripping alpha, data keeps the original channel order
+        PixelFormat intermediate = (format == PixelFormat::RGBA)
+                                       ? PixelFormat::RGB
+                                       : PixelFormat::BGR;
+        format = intermediate;
+
+        if (format != target) {
+            SwapRgbChannels(*this);  // RGB ↔ BGR
         }
-        format = target;
         return true;
     }
 
@@ -287,6 +289,51 @@ static bool ReadPPM(const std::string& path, std::vector<uint8_t>& data,
     return n == data.size();
 }
 
+// Parse WxH from filename e.g. "cat_1280x720.nv21.yuv" → 1280, 720
+static bool ParseNv21Dims(const std::string& path, int& w, int& h) {
+    // Find the last occurrence of NNNNxNNNN pattern before the extension
+    const char* p = path.c_str();
+    const char* last_x = nullptr;
+    for (const char* s = p; *s; ++s) {
+        if (*s == 'x' || *s == 'X') last_x = s;
+    }
+    if (!last_x) return false;
+
+    // Scan digits before 'x'
+    const char* pre = last_x - 1;
+    while (pre >= p && *pre >= '0' && *pre <= '9') --pre;
+    ++pre;
+
+    // Scan digits after 'x'
+    const char* post = last_x + 1;
+    while (*post >= '0' && *post <= '9') ++post;
+
+    w = atoi(pre);
+    h = atoi(last_x + 1);
+    return w > 0 && h > 0;
+}
+
+static bool ReadRawNV21(const std::string& path, std::vector<uint8_t>& data,
+                        int& w, int& h, int& c) {
+    if (!ParseNv21Dims(path, w, h)) return false;
+    size_t expect = static_cast<size_t>(w) * h * 3 / 2;
+
+    FILE* f = fopen(path.c_str(), "rb");
+    if (!f) return false;
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (static_cast<size_t>(sz) != expect) { fclose(f); return false; }
+
+    data.resize(sz);
+    size_t n = fread(data.data(), 1, sz, f);
+    fclose(f);
+    if (n != static_cast<size_t>(sz)) return false;
+
+    c = 2;
+    return true;
+}
+
 Image Image::FromFile(const std::string& path) {
 #ifdef EDGEINFER_WITH_OPENCV
     cv::Mat m = cv::imread(path, cv::IMREAD_COLOR);
@@ -294,12 +341,21 @@ Image Image::FromFile(const std::string& path) {
         Image img = FromCvMat(m);
         return img;
     }
-    // fall through to PPM if OpenCV can't read it
 #endif
-    std::vector<uint8_t> data;
-    int w = 0, h = 0, c = 0;
-    if (ReadPPM(path, data, w, h, c))
-        return Image(data.data(), w, h, c, PixelFormat::RGB);
+    // Try NV21 raw YUV (parse WxH from filename)
+    {
+        std::vector<uint8_t> data;
+        int w = 0, h = 0, c = 0;
+        if (ReadRawNV21(path, data, w, h, c))
+            return Image(data.data(), w, h, c, PixelFormat::NV21);
+    }
+    // Try PPM
+    {
+        std::vector<uint8_t> data;
+        int w = 0, h = 0, c = 0;
+        if (ReadPPM(path, data, w, h, c))
+            return Image(data.data(), w, h, c, PixelFormat::RGB);
+    }
     return Image();
 }
 

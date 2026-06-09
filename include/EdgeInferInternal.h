@@ -26,6 +26,7 @@
 #include "adapters/ncnn_adapter.h"
 #include "adapters/mnn_adapter.h"
 #include "adapters/cvdnn_adapter.h"
+#include "adapters/ntcnn_adapter.h"
 
 // --- Processors ---
 #include "processors/resize.h"

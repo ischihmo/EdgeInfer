@@ -114,10 +114,9 @@ void NcnnAdapter::Release() {
 Tensor NcnnAdapter::ImageToTensor(const Image& img) {
     if (img.Empty()) return Tensor();
 
-    Tensor tensor;
     int pix_type = MapPixelFormat(img.format);
 
-    // Use ncnn's built-in from_pixels (automatic HWC->CHW layout conversion)
+    // Use ncnn's built-in from_pixels (automatic HWC→CHW layout conversion)
     ncnn::Mat ncnn_mat;
     if (img.width != config_.input_width || img.height != config_.input_height) {
         ncnn_mat = ncnn::Mat::from_pixels_resize(
@@ -131,8 +130,6 @@ Tensor NcnnAdapter::ImageToTensor(const Image& img) {
     }
 
     // --- Apply mean/scale normalization ---
-    // ncnn formula: output = (input - mean) * norm
-    // Our config: output = (input - mean) * scale  (scale defaults to 1/255)
     if (!config_.mean.empty() && !config_.scale.empty()) {
         float mean_vals[3] = {0, 0, 0};
         float norm_vals[3] = {1.0f, 1.0f, 1.0f};
@@ -145,10 +142,11 @@ Tensor NcnnAdapter::ImageToTensor(const Image& img) {
     }
 
     // --- Convert to Tensor ---
+    Tensor tensor;
     tensor.shape = Shape(1, ncnn_mat.c, ncnn_mat.h, ncnn_mat.w);
-    tensor.data.resize(tensor.shape.Size());
-    std::memcpy(tensor.data.data(), ncnn_mat.data,
-                tensor.data.size() * sizeof(float));
+    size_t total = tensor.shape.Size();
+    tensor.data.resize(total);
+    std::memcpy(tensor.data.data(), ncnn_mat.data, total * sizeof(float));
 
     return tensor;
 }

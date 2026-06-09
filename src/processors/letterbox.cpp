@@ -89,26 +89,44 @@ void LetterBoxProcessor::Process(const Image& input, Image& output) {
     pad_left_ = pad_w / 2;
     pad_top_  = pad_h / 2;
 
-    // Step 1: bilinear resize
-    Image resized;
-    BilinearResize(input, resized, new_w, new_h);
+    // Step 1: bilinear resize into pre-allocated resized_ buffer
+    BilinearResize(input, resized_, new_w, new_h);
 
-    // Step 2: create padded canvas
+    // Step 2: allocate/reuse padded canvas
     int out_w = new_w + pad_w;
     int out_h = new_h + pad_h;
-    output = Image(out_w, out_h, resized.channels, resized.format);
-    std::memset(output.data.data(), pad_value_, output.data.size());
+    size_t need = static_cast<size_t>(out_w) * out_h * resized_.channels;
+    if (padded_w_ != out_w || padded_h_ != out_h ||
+        padded_.channels != resized_.channels ||
+        padded_.format   != resized_.format ||
+        padded_.data.size() != need) {
+        padded_ = Image(out_w, out_h, resized_.channels, resized_.format);
+        padded_w_ = out_w;
+        padded_h_ = out_h;
+    }
+    std::memset(padded_.data.data(), pad_value_, padded_.data.size());
 
     // Step 3: copy resized into center of canvas
     for (int y = 0; y < new_h; ++y) {
-        const uint8_t* src_row = resized.data.data() +
-            static_cast<size_t>(y) * new_w * resized.channels;
-        uint8_t* dst_row = output.data.data() +
-            static_cast<size_t>(y + pad_top_) * out_w * output.channels +
-            static_cast<size_t>(pad_left_) * output.channels;
+        const uint8_t* src_row = resized_.data.data() +
+            static_cast<size_t>(y) * new_w * resized_.channels;
+        uint8_t* dst_row = padded_.data.data() +
+            static_cast<size_t>(y + pad_top_) * out_w * padded_.channels +
+            static_cast<size_t>(pad_left_) * padded_.channels;
         std::memcpy(dst_row, src_row,
-                    static_cast<size_t>(new_w) * resized.channels);
+                    static_cast<size_t>(new_w) * resized_.channels);
     }
+
+    // Swap padded_ ↔ output: output gets fresh data, padded_ gets
+    // output's old buffer (pre-seeded for reuse next frame).
+    // Swap: output gets fresh data, padded_ gets output's old buffer (reuse next frame)
+    std::swap(output.data, padded_.data);
+    output.width    = padded_.width;
+    output.height   = padded_.height;
+    output.channels = padded_.channels;
+    output.format   = padded_.format;
+    output.layout   = padded_.layout;
+    // padded_ dimensions intentionally kept — used by next call's size check
 }
 
 bool LetterBoxProcessor::GetLetterboxInfo(

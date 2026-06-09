@@ -32,7 +32,8 @@ enum class PixelFormat : uint8_t {
     BGR = 0,
     RGB = 1,
     GRAY = 2,
-    NV12 = 3,
+    NV12 = 3,   // Y + UV interleaved (U first)
+    NV21 = 6,   // Y + VU interleaved (V first) — Android camera / Novatek NPU
     RGBA = 4,
     BGRA = 5
 };
@@ -73,6 +74,9 @@ struct EDGEINFER_IMAGE_API Image {
         return data.empty() || width <= 0 || height <= 0;
     }
     size_t Size() const {
+        // NV12/NV21 are YUV420 semi-planar: Y plane + interleaved UV/VU
+        if (format == PixelFormat::NV12 || format == PixelFormat::NV21)
+            return static_cast<size_t>(width) * height * 3 / 2;
         return static_cast<size_t>(width) * height * channels;
     }
     size_t DataSize() const { return data.size(); }

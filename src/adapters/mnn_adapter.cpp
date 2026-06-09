@@ -3,11 +3,11 @@
 //
 
 #include "../../include/adapters/mnn_adapter.h"
-#include <ImageProcess.hpp>
-#include <expr/Module.hpp>
-#include <expr/ExprCreator.hpp>
-#include <Tensor.hpp>
-#include <MNNForwardType.h>
+#include <MNN/ImageProcess.hpp>
+#include <MNN/expr/Module.hpp>
+#include <MNN/expr/ExprCreator.hpp>
+#include <MNN/Tensor.hpp>
+#include <MNN/MNNForwardType.h>
 
 namespace edgeinfer {
 

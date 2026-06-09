@@ -22,7 +22,7 @@ enum class Backend : uint8_t {
     NCNN = 1,
     CVDNN = 2,
     ONNXRUNTIME = 3,
-    NPU = 4,
+    NTCNN = 4,
     AUTO = 255
 };
 

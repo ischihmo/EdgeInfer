@@ -1,14 +1,15 @@
 //
 // EdgeInfer - Public C++ API
 //
-// Thread-safe singleton interface for inference.
+// Thread-safe factory-based interface for inference.
+// Each instance runs an independent pipeline; create as many as needed.
 //
 // Usage:
 //   #include <EdgeInfer.hpp>
-//   auto& engine = EdgeInfer::GetInstance();
-//   engine.Init("config.json");
+//   auto engine = EdgeInfer::Create();
+//   engine->Init("config.json");
 //   std::vector<Boxf> boxes;
-//   engine.Detect(image, boxes);
+//   engine->Detect(image, boxes);
 //
 
 #ifndef EDGEINFER_HPP
@@ -43,15 +44,12 @@ namespace edgeinfer {
 class InferencePipeline;
 
 // ============================================================
-// EdgeInfer - Thread-Safe Singleton Engine
+// EdgeInfer - Thread-Safe Inference Engine (Factory)
 // ============================================================
 
 class EDGEINFER_API EdgeInfer {
 public:
-    // --- Singleton ---
-    static EdgeInfer& GetInstance();
-
-    // --- Factory (non-singleton, used by C API) ---
+    // --- Factory ---
     static std::unique_ptr<EdgeInfer> Create();
 
     // --- Lifecycle ---
@@ -84,11 +82,11 @@ public:
     // --- Query ---
     std::string TaskType() const;
 
-    // Disallow copy / move
+    // Disallow copy, allow move
     EdgeInfer(const EdgeInfer&) = delete;
     EdgeInfer& operator=(const EdgeInfer&) = delete;
-    EdgeInfer(EdgeInfer&&) = delete;
-    EdgeInfer& operator=(EdgeInfer&&) = delete;
+    EdgeInfer(EdgeInfer&& other) noexcept;
+    EdgeInfer& operator=(EdgeInfer&& other) noexcept;
 
 private:
     EdgeInfer() = default;

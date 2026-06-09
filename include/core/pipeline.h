@@ -68,6 +68,7 @@ private:
     std::unique_ptr<Engine> engine_;
     std::unique_ptr<PreProcessorChain> pre_processor_;
     std::unique_ptr<PostProcessorChain> post_processor_;
+    Image preprocessed_;   // reused across Preprocess() calls
     PipelineConfig config_;
     bool ready_ = false;
 };

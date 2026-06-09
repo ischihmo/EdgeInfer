@@ -24,7 +24,7 @@ echo "=== Copying runtime files ==="
 cp -v "$INSTALL_DIR/bin/demo"           "$TEST_DIR/bin/"
 cp -v "$INSTALL_DIR/lib/"lib* "$TEST_DIR/lib/"
 cp -v "$INSTALL_DIR/share/EdgeInfer/model/"yolov5n.* "$TEST_DIR/model/"
-cp -v "$INSTALL_DIR/share/EdgeInfer/config.json" "$TEST_DIR/"
+cp -v "$INSTALL_DIR/share/EdgeInfer/config.yaml" "$TEST_DIR/"
 
 # ── Determine image ────────────────────────────────────────
 if [ "${1:-}" != "" ]; then
@@ -67,7 +67,7 @@ cd "$TEST_DIR"
 
 export LD_LIBRARY_PATH="${TEST_DIR}/lib:${LD_LIBRARY_PATH:-}"
 
-./bin/demo input.ppm config.json
+./bin/demo input.ppm config.yaml
 
 echo ""
 echo "=== Done ==="

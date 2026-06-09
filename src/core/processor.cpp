@@ -18,15 +18,23 @@ void PreProcessorChain::Add(std::unique_ptr<IPreProcessor> step) {
 }
 
 void PreProcessorChain::Process(const Image& input, Image& output) {
-    Image current = input;
-
-    for (auto& step : steps_) {
-        Image next;
-        step->Process(current, next);
-        current = std::move(next);
+    // Single-step fast path: skip scratch buffers
+    if (steps_.size() == 1) {
+        steps_[0]->Process(input, output);
+        return;
     }
 
-    output = std::move(current);
+    // Ping-pong between two scratch buffers so input ≠ output always
+    const Image* src = &input;
+    for (size_t i = 0; i < steps_.size(); ++i) {
+        if (i + 1 == steps_.size()) {
+            steps_[i]->Process(*src, output);
+        } else {
+            Image* dst = &buf_[i & 1];
+            steps_[i]->Process(*src, *dst);
+            src = dst;
+        }
+    }
 }
 
 // ============================================================

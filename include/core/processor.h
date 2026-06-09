@@ -72,6 +72,7 @@ public:
 
 private:
     std::vector<std::unique_ptr<IPreProcessor>> steps_;
+    Image buf_[2];  // ping-pong scratch buffers (never overlap input/output)
 };
 
 // ============================================================
